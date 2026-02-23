@@ -1,0 +1,56 @@
+name: budget_snap
+description: budget tracking with receipt parsing.
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.1.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # --- State Management ---
+  flutter_riverpod: ^2.4.9
+  riverpod_annotation: ^2.3.3
+  hooks_riverpod: ^2.4.9
+  flutter_hooks: ^0.20.3
+
+  # --- Backend ---
+  supabase_flutter: ^2.3.0
+
+  # --- Code Generation (models) ---
+  freezed_annotation: ^2.4.1
+  json_annotation: ^4.8.1
+
+  # --- Navigation ---
+  go_router: ^13.2.0
+
+  # --- Charts ---
+  fl_chart: ^0.66.2
+
+  # --- Image & OCR ---
+  image_picker: ^1.0.7
+  google_mlkit_text_recognition: ^0.11.0
+
+  # --- UI Utilities ---
+  intl: ^0.19.0
+  uuid: ^4.3.3
+  equatable: ^2.0.5
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  # --- Code Generation ---
+  build_runner: ^2.4.8
+  freezed: ^2.4.6
+  json_serializable: ^6.7.1
+  riverpod_generator: ^2.3.9
+  custom_lint: ^0.6.3
+  riverpod_lint: ^2.3.7
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
