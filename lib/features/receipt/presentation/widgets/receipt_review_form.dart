@@ -1,5 +1,8 @@
 import 'dart:io';
 
+import 'package:budget_snap/core/utils/currency_input_formatter.dart';
+import 'package:budget_snap/core/utils/snackbar_service.dart';
+import 'package:budget_snap/core/utils/validators.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -107,37 +110,39 @@ class _ReceiptReviewFormState extends ConsumerState<ReceiptReviewForm> {
     if (picked != null) setState(() => _selectedDate = picked);
   }
 
-  Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
+Future<void> _submit() async {
+  if (!_formKey.currentState!.validate()) return;
 
-    final items = List.generate(
-      _itemNameControllers.length,
-      (i) => (
-        name: _itemNameControllers[i].text.trim(),
-        price: double.tryParse(_itemPriceControllers[i].text) ?? 0,
-        categoryId: _itemCategoryIds[i],
-      ),
-    );
+  final items = List.generate(
+    _itemNameControllers.length,
+    (i) => (
+      name: _itemNameControllers[i].text.trim(),
+      price: double.tryParse(_itemPriceControllers[i].text) ?? 0,
+      categoryId: _itemCategoryIds[i],
+    ),
+  );
 
-    final success = await ref
-        .read(receiptParseNotifierProvider.notifier)
-        .saveExpense(
-          categoryId: _selectedCategoryId,
-          comment: _commentCtrl.text.trim().isEmpty
-              ? null
-              : _commentCtrl.text.trim(),
-          items: items,
-        );
-
-    if (success && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Expense saved successfully'),
-          backgroundColor: AppColors.success,
-        ),
+  final success = await ref
+      .read(receiptParseNotifierProvider.notifier)
+      .saveExpense(
+        categoryId: _selectedCategoryId,
+        comment: _commentCtrl.text.trim().isEmpty
+            ? null
+            : _commentCtrl.text.trim(),
+        items: items,
       );
+
+  if (!mounted) return;
+
+  if (success) {
+    SnackBarService.showSuccess(context, 'Expense saved successfully');
+  } else {
+    final state = ref.read(receiptParseNotifierProvider);
+    if (state is ReceiptParseError) {
+      SnackBarService.showError(context, state.message);
     }
   }
+}
 
   void _addItem() {
     setState(() {
@@ -535,7 +540,6 @@ class _NameField extends StatelessWidget {
     );
   }
 }
-
 class _PriceField extends StatelessWidget {
   const _PriceField({required this.controller});
 
@@ -546,16 +550,16 @@ class _PriceField extends StatelessWidget {
     return TextFormField(
       controller: controller,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      inputFormatters: [CurrencyInputFormatter()],
       decoration: const InputDecoration(
         labelText: 'Price',
         prefixText: '\$ ',
         isDense: true,
       ),
-      validator: (v) {
-        if (v == null || v.isEmpty) return 'Required';
-        if (double.tryParse(v) == null) return 'Invalid';
-        return null;
-      },
+      validator: Validators.compose([
+        Validators.required('Required'),
+        Validators.positiveAmount(),
+      ]),
     );
   }
 }

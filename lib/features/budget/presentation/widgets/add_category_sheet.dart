@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/utils/currency_input_formatter.dart';
 import '../../../../core/utils/responsive.dart';
+import '../../../../core/utils/snackbar_service.dart';
+import '../../../../core/utils/validators.dart';
 import '../../../../core/widgets/loading_button.dart';
 import '../../../../core/widgets/sheet_handle.dart';
 import '../../domain/models/category.dart';
@@ -14,7 +17,8 @@ class AddCategorySheet extends ConsumerStatefulWidget {
   final DateTime month;
 
   @override
-  ConsumerState<AddCategorySheet> createState() => _AddCategorySheetState();
+  ConsumerState<AddCategorySheet> createState() =>
+      _AddCategorySheetState();
 }
 
 class _AddCategorySheetState extends ConsumerState<AddCategorySheet> {
@@ -39,13 +43,23 @@ class _AddCategorySheetState extends ConsumerState<AddCategorySheet> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+
     await ref
         .read(budgetNotifierProvider(widget.month).notifier)
         .addCategory(
           name: _nameCtrl.text.trim(),
           allocatedAmount: double.parse(_amountCtrl.text),
         );
-    if (mounted) Navigator.pop(context);
+
+    if (!mounted) return;
+
+    final state = ref.read(budgetNotifierProvider(widget.month));
+    if (state is BudgetError) {
+      SnackBarService.showError(context, state.message);
+    } else {
+      SnackBarService.showSuccess(context, 'Category added');
+      Navigator.pop(context);
+    }
   }
 
   @override
@@ -54,11 +68,10 @@ class _AddCategorySheetState extends ConsumerState<AddCategorySheet> {
         is BudgetLoading;
     final theme     = Theme.of(context);
 
-    // Sheet can grow to 75% of screen height to accommodate chip grid
-    // and keyboard without overflow
     return ConstrainedBox(
       constraints: BoxConstraints(
-        maxHeight: context.heightFraction(0.75) + context.bottomInset,
+        maxHeight:
+            context.heightFraction(0.75) + context.bottomInset,
       ),
       child: Padding(
         padding: EdgeInsets.fromLTRB(
@@ -77,7 +90,8 @@ class _AddCategorySheetState extends ConsumerState<AddCategorySheet> {
               children: [
                 const SheetHandle(),
                 SizedBox(
-                  height: context.heightFraction(0.02).clamp(12.0, 20.0),
+                  height:
+                      context.heightFraction(0.02).clamp(12.0, 20.0),
                 ),
                 Text(
                   'Add Category',
@@ -86,7 +100,8 @@ class _AddCategorySheetState extends ConsumerState<AddCategorySheet> {
                   ),
                 ),
                 SizedBox(
-                  height: context.heightFraction(0.015).clamp(10.0, 16.0),
+                  height:
+                      context.heightFraction(0.015).clamp(10.0, 16.0),
                 ),
                 Text(
                   'Quick select',
@@ -95,12 +110,14 @@ class _AddCategorySheetState extends ConsumerState<AddCategorySheet> {
                   ),
                 ),
                 SizedBox(
-                  height: context.heightFraction(0.01).clamp(6.0, 10.0),
+                  height:
+                      context.heightFraction(0.01).clamp(6.0, 10.0),
                 ),
-                // Wrap lets chips flow naturally — no fixed height grid
                 Wrap(
-                  spacing: context.widthFraction(0.02).clamp(6.0, 10.0),
-                  runSpacing: context.heightFraction(0.005).clamp(4.0, 8.0),
+                  spacing:
+                      context.widthFraction(0.02).clamp(6.0, 10.0),
+                  runSpacing:
+                      context.heightFraction(0.005).clamp(4.0, 8.0),
                   children: PredefinedCategory.values.map((cat) {
                     return FilterChip(
                       label: Text(cat.label),
@@ -110,7 +127,8 @@ class _AddCategorySheetState extends ConsumerState<AddCategorySheet> {
                   }).toList(),
                 ),
                 SizedBox(
-                  height: context.heightFraction(0.02).clamp(12.0, 18.0),
+                  height:
+                      context.heightFraction(0.02).clamp(12.0, 18.0),
                 ),
                 TextFormField(
                   controller: _nameCtrl,
@@ -121,36 +139,31 @@ class _AddCategorySheetState extends ConsumerState<AddCategorySheet> {
                   ),
                   onChanged: (_) =>
                       setState(() => _selectedPredefined = null),
-                  validator: (v) {
-                    if (v == null || v.trim().isEmpty) {
-                      return 'Category name is required';
-                    }
-                    return null;
-                  },
+                  validator:
+                      Validators.required('Category name is required'),
                 ),
                 SizedBox(
-                  height: context.heightFraction(0.015).clamp(10.0, 16.0),
+                  height:
+                      context.heightFraction(0.015).clamp(10.0, 16.0),
                 ),
                 TextFormField(
                   controller: _amountCtrl,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true),
+                  inputFormatters: [CurrencyInputFormatter()],
                   decoration: const InputDecoration(
                     labelText: 'Allocated Amount',
                     prefixText: '\$ ',
                     hintText: '0.00',
                   ),
-                  validator: (v) {
-                    if (v == null || v.isEmpty) return 'Amount is required';
-                    final parsed = double.tryParse(v);
-                    if (parsed == null || parsed <= 0) {
-                      return 'Enter a valid amount';
-                    }
-                    return null;
-                  },
+                  validator: Validators.compose([
+                    Validators.required('Amount is required'),
+                    Validators.positiveAmount(),
+                  ]),
                 ),
                 SizedBox(
-                  height: context.heightFraction(0.025).clamp(14.0, 24.0),
+                  height:
+                      context.heightFraction(0.025).clamp(14.0, 24.0),
                 ),
                 LoadingButton(
                   label: 'Add Category',

@@ -5,23 +5,21 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/config/supabase_config.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
+import 'core/widgets/app_error_boundary.dart';
 
 Future<void> main() async {
-  // Must be called before any async work in main()
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Supabase once at app startup.
-  // The client becomes available anywhere via Supabase.instance.client,
-  // but we'll wrap it in a Riverpod provider so it's testable.
   await Supabase.initialize(
     url: SupabaseConfig.supabaseUrl,
     anonKey: SupabaseConfig.supabaseAnonKey,
   );
 
   runApp(
-    // ProviderScope is the Riverpod root — must wrap the entire app.
-    const ProviderScope(
-      child: BudgetSnap(),
+    const AppErrorBoundary(
+      child: ProviderScope(
+        child: BudgetSnap(),
+      ),
     ),
   );
 }
@@ -32,7 +30,7 @@ class BudgetSnap extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'Budget Snap',
+      title: 'Budget AI',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,

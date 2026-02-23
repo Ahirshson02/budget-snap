@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/utils/currency_input_formatter.dart';
 import '../../../../core/utils/responsive.dart';
+import '../../../../core/utils/snackbar_service.dart';
+import '../../../../core/utils/validators.dart';
 import '../../../../core/widgets/loading_button.dart';
 import '../../../../core/widgets/sheet_handle.dart';
 import '../../domain/models/category.dart';
@@ -25,7 +28,9 @@ class EditCategorySheet extends ConsumerStatefulWidget {
 
 class _EditCategorySheetState extends ConsumerState<EditCategorySheet> {
   final _formKey = GlobalKey<FormState>();
-  late final _nameCtrl = TextEditingController(text: widget.category.name);
+  late final _nameCtrl = TextEditingController(
+    text: widget.category.name,
+  );
   late final _amountCtrl = TextEditingController(
     text: widget.category.allocatedAmount.toStringAsFixed(2),
   );
@@ -39,6 +44,7 @@ class _EditCategorySheetState extends ConsumerState<EditCategorySheet> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+
     await ref
         .read(budgetNotifierProvider(widget.month).notifier)
         .updateCategory(
@@ -46,7 +52,16 @@ class _EditCategorySheetState extends ConsumerState<EditCategorySheet> {
           name: _nameCtrl.text.trim(),
           allocatedAmount: double.parse(_amountCtrl.text),
         );
-    if (mounted) Navigator.pop(context);
+
+    if (!mounted) return;
+
+    final state = ref.read(budgetNotifierProvider(widget.month));
+    if (state is BudgetError) {
+      SnackBarService.showError(context, state.message);
+    } else {
+      SnackBarService.showSuccess(context, 'Category updated');
+      Navigator.pop(context);
+    }
   }
 
   @override
@@ -57,7 +72,8 @@ class _EditCategorySheetState extends ConsumerState<EditCategorySheet> {
 
     return ConstrainedBox(
       constraints: BoxConstraints(
-        maxHeight: context.heightFraction(0.55) + context.bottomInset,
+        maxHeight:
+            context.heightFraction(0.55) + context.bottomInset,
       ),
       child: Padding(
         padding: EdgeInsets.fromLTRB(
@@ -76,7 +92,8 @@ class _EditCategorySheetState extends ConsumerState<EditCategorySheet> {
               children: [
                 const SheetHandle(),
                 SizedBox(
-                  height: context.heightFraction(0.02).clamp(12.0, 20.0),
+                  height:
+                      context.heightFraction(0.02).clamp(12.0, 20.0),
                 ),
                 Text(
                   'Edit Category',
@@ -85,7 +102,8 @@ class _EditCategorySheetState extends ConsumerState<EditCategorySheet> {
                   ),
                 ),
                 SizedBox(
-                  height: context.heightFraction(0.02).clamp(12.0, 20.0),
+                  height:
+                      context.heightFraction(0.02).clamp(12.0, 20.0),
                 ),
                 TextFormField(
                   controller: _nameCtrl,
@@ -93,35 +111,30 @@ class _EditCategorySheetState extends ConsumerState<EditCategorySheet> {
                   decoration: const InputDecoration(
                     labelText: 'Category Name',
                   ),
-                  validator: (v) {
-                    if (v == null || v.trim().isEmpty) {
-                      return 'Category name is required';
-                    }
-                    return null;
-                  },
+                  validator:
+                      Validators.required('Category name is required'),
                 ),
                 SizedBox(
-                  height: context.heightFraction(0.015).clamp(10.0, 16.0),
+                  height:
+                      context.heightFraction(0.015).clamp(10.0, 16.0),
                 ),
                 TextFormField(
                   controller: _amountCtrl,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true),
+                  inputFormatters: [CurrencyInputFormatter()],
                   decoration: const InputDecoration(
                     labelText: 'Allocated Amount',
                     prefixText: '\$ ',
                   ),
-                  validator: (v) {
-                    if (v == null || v.isEmpty) return 'Amount is required';
-                    final parsed = double.tryParse(v);
-                    if (parsed == null || parsed <= 0) {
-                      return 'Enter a valid amount';
-                    }
-                    return null;
-                  },
+                  validator: Validators.compose([
+                    Validators.required('Amount is required'),
+                    Validators.positiveAmount(),
+                  ]),
                 ),
                 SizedBox(
-                  height: context.heightFraction(0.025).clamp(14.0, 24.0),
+                  height:
+                      context.heightFraction(0.025).clamp(14.0, 24.0),
                 ),
                 LoadingButton(
                   label: 'Save Changes',

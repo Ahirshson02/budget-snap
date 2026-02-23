@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/utils/currency_input_formatter.dart';
 import '../../../../core/utils/responsive.dart';
+import '../../../../core/utils/snackbar_service.dart';
+import '../../../../core/utils/validators.dart';
 import '../../../../core/widgets/loading_button.dart';
 import '../../../../core/widgets/sheet_handle.dart';
 import '../providers/budget_notifier.dart';
@@ -13,7 +16,8 @@ class CreateBudgetSheet extends ConsumerStatefulWidget {
   final DateTime month;
 
   @override
-  ConsumerState<CreateBudgetSheet> createState() => _CreateBudgetSheetState();
+  ConsumerState<CreateBudgetSheet> createState() =>
+      _CreateBudgetSheetState();
 }
 
 class _CreateBudgetSheetState extends ConsumerState<CreateBudgetSheet> {
@@ -28,13 +32,23 @@ class _CreateBudgetSheetState extends ConsumerState<CreateBudgetSheet> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+
     await ref
         .read(budgetNotifierProvider(widget.month).notifier)
         .createBudget(
           month: widget.month,
           totalBudget: double.parse(_amountCtrl.text),
         );
-    if (mounted) Navigator.pop(context);
+
+    if (!mounted) return;
+
+    final state = ref.read(budgetNotifierProvider(widget.month));
+    if (state is BudgetError) {
+      SnackBarService.showError(context, state.message);
+    } else {
+      SnackBarService.showSuccess(context, 'Budget created successfully');
+      Navigator.pop(context);
+    }
   }
 
   @override
@@ -43,10 +57,10 @@ class _CreateBudgetSheetState extends ConsumerState<CreateBudgetSheet> {
         is BudgetLoading;
     final theme     = Theme.of(context);
 
-    // Sheet occupies at most 40% of screen height (plus keyboard inset)
     return ConstrainedBox(
       constraints: BoxConstraints(
-        maxHeight: context.heightFraction(0.40) + context.bottomInset,
+        maxHeight:
+            context.heightFraction(0.40) + context.bottomInset,
       ),
       child: Padding(
         padding: EdgeInsets.fromLTRB(
@@ -65,7 +79,8 @@ class _CreateBudgetSheetState extends ConsumerState<CreateBudgetSheet> {
               children: [
                 const SheetHandle(),
                 SizedBox(
-                  height: context.heightFraction(0.02).clamp(12.0, 20.0),
+                  height:
+                      context.heightFraction(0.02).clamp(12.0, 20.0),
                 ),
                 Text(
                   'Create Budget',
@@ -83,29 +98,28 @@ class _CreateBudgetSheetState extends ConsumerState<CreateBudgetSheet> {
                   ),
                 ),
                 SizedBox(
-                  height: context.heightFraction(0.02).clamp(12.0, 20.0),
+                  height:
+                      context.heightFraction(0.02).clamp(12.0, 20.0),
                 ),
                 TextFormField(
                   controller: _amountCtrl,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true),
                   autofocus: true,
+                  inputFormatters: [CurrencyInputFormatter()],
                   decoration: const InputDecoration(
                     labelText: 'Total Budget',
                     prefixText: '\$ ',
                     hintText: '0.00',
                   ),
-                  validator: (v) {
-                    if (v == null || v.isEmpty) return 'Amount is required';
-                    final parsed = double.tryParse(v);
-                    if (parsed == null || parsed <= 0) {
-                      return 'Enter a valid amount';
-                    }
-                    return null;
-                  },
+                  validator: Validators.compose([
+                    Validators.required('Amount is required'),
+                    Validators.positiveAmount(),
+                  ]),
                 ),
                 SizedBox(
-                  height: context.heightFraction(0.025).clamp(14.0, 24.0),
+                  height:
+                      context.heightFraction(0.025).clamp(14.0, 24.0),
                 ),
                 LoadingButton(
                   label: 'Create Budget',

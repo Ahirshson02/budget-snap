@@ -1,3 +1,4 @@
+import 'package:budget_snap/features/budget/presentation/widgets/budget_allocation_warning.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -208,6 +209,10 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
                                 color: theme.colorScheme.outline,
                               ),
                             ),
+                            // In budget_screen.dart ListView children, after the total budget Card:
+                            SizedBox(height: context.heightFraction(0.015).clamp(8.0, 16.0)),
+                            BudgetAllocationWarning(budget: budget),
+                            SizedBox(height: context.heightFraction(0.015).clamp(8.0, 16.0)),
                             SizedBox(
                               height: context.heightFraction(0.005)
                                   .clamp(2.0, 6.0),
