@@ -38,15 +38,23 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
           password: _passCtrl.text,
         );
 
-    // Show error via snackbar so it's visible even if the state
-    // transitions away before the widget rebuilds
-    if (mounted && ref.read(authNotifierProvider).hasError) {
-      SnackBarService.showError(
-        context,
-        ref.read(authNotifierProvider).errorMessage!,
-      );
+    if (!mounted) return;
+
+    final authState = ref.read(authNotifierProvider);
+
+    if (authState.hasError) {
+      SnackBarService.showError(context, authState.errorMessage!);
+      return;
     }
-  }
+
+    // Session is confirmed — navigate to home explicitly.
+    // We do this here rather than relying solely on the router's
+    // refreshListenable because the Supabase auth stream and GoRouter's
+    // redirect can have a timing gap that leaves the user stuck.
+    if (authState.user != null) {
+      context.go(AppRoutes.home);
+    }
+}
 
   @override
   Widget build(BuildContext context) {
@@ -82,7 +90,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                         ),
                         SizedBox(height: height * 0.01),
                         Text(
-                          'Sign in to your Budget AI account',
+                          'Sign in to your Budget Snap account',
                           style: theme.textTheme.bodyLarge?.copyWith(
                             color: theme.colorScheme.outline,
                           ),
@@ -132,6 +140,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                           label: 'Sign In',
                           isLoading: authState.isLoading,
                           onPressed: _submit,
+                          //try to check if user is signed in and then pass to homescreen through
                         ),
                         SizedBox(height: height * 0.02),
                         Center(

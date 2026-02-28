@@ -40,10 +40,24 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
           password: _passCtrl.text,
         );
 
-    if (mounted && ref.read(authNotifierProvider).hasError) {
-      SnackBarService.showError(
+    if (!mounted) return;
+
+    final authState = ref.read(authNotifierProvider);
+
+    if (authState.hasError) {
+      SnackBarService.showError(context, authState.errorMessage!);
+      return;
+    }
+
+    // Supabase may require email confirmation depending on your project
+    // settings. If email confirmation is enabled, user will be null here
+    // and we show a message instead of navigating.
+    if (authState.user != null) {
+      context.go(AppRoutes.home);
+    } else {
+      SnackBarService.showInfo(
         context,
-        ref.read(authNotifierProvider).errorMessage!,
+        'Check your email to confirm your account, then sign in.',
       );
     }
   }

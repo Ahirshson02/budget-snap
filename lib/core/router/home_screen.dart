@@ -15,6 +15,7 @@ import '../../features/budget/domain/models/category.dart';
 import '../../features/budget/presentation/providers/budget_notifier.dart';
 import '../../features/budget/presentation/providers/budget_state.dart';
 import '../../features/budget/presentation/widgets/create_budget_sheet.dart';
+import '../widgets/manual_charge.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -25,15 +26,20 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   late DateTime _selectedMonth;
-
-  @override
+ @override
   void initState() {
     super.initState();
     final now = DateTime.now();
     _selectedMonth = DateTime(now.year, now.month);
+
+    // Schedule the initial load after the first frame so the
+    // provider is fully registered before we call into it.
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
+  /// Triggers a fresh load on the notifier for the current month.
+  /// Always reads the provider fresh inside this method so it
+  /// always targets the correct family instance.
   void _load() {
     ref
         .read(budgetNotifierProvider(_selectedMonth).notifier)
@@ -42,18 +48,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   void _previousMonth() {
     setState(() {
-      _selectedMonth =
-          DateTime(_selectedMonth.year, _selectedMonth.month - 1);
+      _selectedMonth = DateTime(
+        _selectedMonth.year,
+        _selectedMonth.month - 1,
+      );
     });
-    _load();
+    // Use addPostFrameCallback so setState has completed and the new
+    // provider instance exists before we call load on it.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
   void _nextMonth() {
     setState(() {
-      _selectedMonth =
-          DateTime(_selectedMonth.year, _selectedMonth.month + 1);
+      _selectedMonth = DateTime(
+        _selectedMonth.year,
+        _selectedMonth.month + 1,
+      );
     });
-    _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
   void _showCreateBudget() {
@@ -75,7 +87,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Budget AI'),
+        title: const Text('Budget Snap'),
         actions: [
           IconButton(
             icon: const Icon(Icons.logout_rounded),
@@ -108,11 +120,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   actionLabel: 'Create Budget',
                   onAction: _showCreateBudget,
                 ),
-              BudgetLoaded(:final budget, :final spentPerCategory) =>
-                _BudgetOverview(
-                  budget: budget,
-                  spentPerCategory: spentPerCategory,
-                ),
+             BudgetLoaded(:final budget, :final spentPerCategory, :final uncategorizedSpent) =>
+              _BudgetOverview(
+                budget: budget,
+                spentPerCategory: spentPerCategory,
+                uncategorizedSpent: uncategorizedSpent,
+                onCreateBudget: _showCreateBudget,
+                month: _selectedMonth
+              ),
             },
           ),
         ],
@@ -176,19 +191,28 @@ class _MonthSelector extends StatelessWidget {
 // ----------------------------------------------------------------
 // Budget overview
 // ----------------------------------------------------------------
-
 class _BudgetOverview extends StatelessWidget {
   const _BudgetOverview({
     required this.budget,
     required this.spentPerCategory,
+    required this.uncategorizedSpent,
+    required this.onCreateBudget,
+    required this.month,
   });
 
   final Budget budget;
   final Map<String, double> spentPerCategory;
-
+  final double uncategorizedSpent;
+  final VoidCallback onCreateBudget;
+  final DateTime month;
   @override
   Widget build(BuildContext context) {
-    final totalSpent = spentPerCategory.values.fold(0.0, (a, b) => a + b);
+    // Total spent = all categorized spending + uncategorized spending.
+    // Previously totalSpent only summed categorized expenses, which
+    // made the progress bar and remaining amount inaccurate.
+    final categorizedSpent =
+        spentPerCategory.values.fold(0.0, (a, b) => a + b);
+    final totalSpent = categorizedSpent + uncategorizedSpent;
     final remaining  = budget.totalBudget - totalSpent;
     final theme      = Theme.of(context);
     final hPad       = context.horizontalPadding;
@@ -212,19 +236,28 @@ class _BudgetOverview extends StatelessWidget {
           ),
         ),
         SizedBox(height: context.heightFraction(0.01).clamp(4.0, 10.0)),
-        if (budget.categories.isEmpty)
+
+        // Categorized spending cards
+        if (budget.categories.isEmpty && uncategorizedSpent == 0)
           AppEmptyState(
             icon: Icons.category_outlined,
             title: 'No categories',
             subtitle: 'Go to Budget to add spending categories.',
           )
-        else
+        else ...[
           ...budget.categories.map(
             (cat) => _CategoryCard(
               category: cat,
               spent: spentPerCategory[cat.id] ?? 0,
+              month: month,
             ),
           ),
+
+          // Uncategorized card — only shown when there is uncategorized
+          // spending. Displayed last so categorized items appear first.
+          if (uncategorizedSpent > 0)
+            _UncategorizedCard(amount: uncategorizedSpent, month: month),
+        ],
       ],
     );
   }
@@ -336,10 +369,12 @@ class _CategoryCard extends StatelessWidget {
   const _CategoryCard({
     required this.category,
     required this.spent,
+    required this.month,
   });
 
   final Category category;
   final double spent;
+  final DateTime month;
 
   @override
   Widget build(BuildContext context) {
@@ -366,6 +401,21 @@ class _CategoryCard extends StatelessWidget {
                       fontWeight: FontWeight.w600,
                     ),
                     overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Consumer(
+                  builder: (context, ref, _) => IconButton(
+                    icon: const Icon(Icons.add_circle_outline_rounded),
+                    iconSize: (context.screenWidth * 0.05).clamp(18.0, 22.0),
+                    visualDensity: VisualDensity.compact,
+                    tooltip: 'Add charge',
+                    color: AppColors.primary,
+                    onPressed: () => showAddManualExpenseDialog(
+                      context: context,
+                      ref: ref,
+                      category: category,
+                      month: month
+                    ),
                   ),
                 ),
                 CurrencyText(
@@ -410,6 +460,98 @@ class _CategoryCard extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+}
+
+/// Displays the total of all expenses that have no category assigned.
+///
+/// Shows no allocated amount or progress bar because uncategorized
+/// spending has no budget ceiling — it is purely informational.
+class _UncategorizedCard extends StatelessWidget {
+  const _UncategorizedCard({required this.amount, required this.month});
+
+  final double amount;
+  final DateTime month;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme    = Theme.of(context);
+    final innerPad = context.widthFraction(0.04).clamp(12.0, 20.0);
+
+    return Card(
+      margin: EdgeInsets.only(
+        bottom: context.heightFraction(0.01).clamp(6.0, 12.0),
+      ),
+      child: Padding(
+        padding: EdgeInsets.all(innerPad),
+        child: Row(
+          children: [
+            // Muted icon distinguishes this from regular category cards
+            Container(
+              width: context.widthFraction(0.08).clamp(28.0, 40.0),
+              height: context.widthFraction(0.08).clamp(28.0, 40.0),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceVariant,
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+              ),
+              child: Icon(
+                Icons.help_outline_rounded,
+                size: context.widthFraction(0.045).clamp(16.0, 22.0),
+                color: theme.colorScheme.outline,
+              ),
+            ),
+            SizedBox(width: context.widthFraction(0.03).clamp(8.0, 14.0)),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'Uncategorized',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Consumer(
+                        builder: (context, ref, _) => IconButton(
+                          icon: const Icon(Icons.add_circle_outline_rounded),
+                          iconSize: (context.screenWidth * 0.05).clamp(18.0, 22.0),
+                          visualDensity: VisualDensity.compact,
+                          tooltip: 'Add charge',
+                          color: AppColors.primary,
+                          onPressed: () => showAddManualExpenseDialog(
+                            context: context,
+                            ref: ref,
+                            category: null,
+                            month: month
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    'No category assigned',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.outline,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            CurrencyText(
+              amount,
+              style: TextStyle(
+                fontSize: (context.screenWidth * 0.038).clamp(14.0, 18.0),
+                fontWeight: FontWeight.w700,
+                color: theme.colorScheme.outline,
+              ),
             ),
           ],
         ),

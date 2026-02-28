@@ -1,26 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/utils/app_exception.dart';
-import '../../../../features/receipt/data/providers/expense_repository_provider.dart';
-import '../../../../features/receipt/domain/repositories/expense_repository.dart';
+import '../../../receipt/data/providers/expense_repository_provider.dart';
+import '../../../receipt/domain/repositories/expense_repository.dart';
 import '../../data/providers/budget_repository_provider.dart';
 import '../../domain/models/budget.dart';
 import '../../domain/models/category.dart';
 import '../../domain/repositories/budget_repository.dart';
 import 'budget_state.dart';
 
-/// Notifier for all budget-related state and operations.
-///
-/// Depends on both [BudgetRepository] and [ExpenseRepository] because
-/// the loaded state includes spending totals derived from expenses.
-///
-/// All public methods follow the same pattern:
-///   1. Set loading state
-///   2. Call repository
-///   3. On success → set loaded state with fresh data
-///   4. On failure → set error state with a safe message
-///
-/// The UI never calls repositories directly — it only calls these methods.
 class BudgetNotifier extends StateNotifier<BudgetState> {
   BudgetNotifier({
     required BudgetRepository budgetRepository,
@@ -36,8 +24,6 @@ class BudgetNotifier extends StateNotifier<BudgetState> {
   // Load
   // ----------------------------------------------------------------
 
-  /// Load the budget for [month] and compute category spending totals.
-  /// Call this on screen init and after any mutation.
   Future<void> loadBudget(DateTime month) async {
     state = const BudgetState.loading();
 
@@ -49,8 +35,14 @@ class BudgetNotifier extends StateNotifier<BudgetState> {
         return;
       }
 
-      final spent = await _computeSpentPerCategory(budget, month);
-      state = BudgetState.loaded(budget: budget, spentPerCategory: spent);
+      final (spent, uncategorized) =
+          await _computeSpentPerCategory(month);
+
+      state = BudgetState.loaded(
+        budget: budget,
+        spentPerCategory: spent,
+        uncategorizedSpent: uncategorized,
+      );
     } on AppException catch (e) {
       state = BudgetState.error(_friendlyMessage(e));
     }
@@ -75,6 +67,7 @@ class BudgetNotifier extends StateNotifier<BudgetState> {
       state = BudgetState.loaded(
         budget: budget,
         spentPerCategory: {},
+        uncategorizedSpent: 0,
       );
     } on AppException catch (e) {
       state = BudgetState.error(_friendlyMessage(e));
@@ -82,14 +75,14 @@ class BudgetNotifier extends StateNotifier<BudgetState> {
   }
 
   Future<void> updateBudgetTotal(double newTotal) async {
-    // Guard: can only update when a budget is currently loaded.
     final current = state;
     if (current is! BudgetLoaded) return;
 
-    // Optimistic update — show the change immediately, roll back on error.
+    // Optimistic update
     state = BudgetState.loaded(
       budget: current.budget.copyWith(totalBudget: newTotal),
       spentPerCategory: current.spentPerCategory,
+      uncategorizedSpent: current.uncategorizedSpent,
     );
 
     try {
@@ -101,9 +94,9 @@ class BudgetNotifier extends StateNotifier<BudgetState> {
       state = BudgetState.loaded(
         budget: updated,
         spentPerCategory: current.spentPerCategory,
+        uncategorizedSpent: current.uncategorizedSpent,
       );
     } on AppException catch (e) {
-      // Roll back to the original state on failure.
       state = current;
       state = BudgetState.error(_friendlyMessage(e));
     }
@@ -119,7 +112,7 @@ class BudgetNotifier extends StateNotifier<BudgetState> {
       await _budgetRepo.deleteBudget(current.budget.id);
       state = BudgetState.empty(month: current.budget.month);
     } on AppException catch (e) {
-      state = current; // Restore on failure
+      state = current;
       state = BudgetState.error(_friendlyMessage(e));
     }
   }
@@ -144,7 +137,6 @@ class BudgetNotifier extends StateNotifier<BudgetState> {
         colorHex: colorHex,
       );
 
-      // Append the new category to the current budget's list.
       final updatedBudget = current.budget.copyWith(
         categories: [...current.budget.categories, category],
       );
@@ -152,6 +144,7 @@ class BudgetNotifier extends StateNotifier<BudgetState> {
       state = BudgetState.loaded(
         budget: updatedBudget,
         spentPerCategory: current.spentPerCategory,
+        uncategorizedSpent: current.uncategorizedSpent,
       );
     } on AppException catch (e) {
       state = BudgetState.error(_friendlyMessage(e));
@@ -175,7 +168,6 @@ class BudgetNotifier extends StateNotifier<BudgetState> {
         colorHex: colorHex,
       );
 
-      // Replace the matching category in the list, keep all others.
       final updatedCategories = current.budget.categories
           .map((c) => c.id == categoryId ? updated : c)
           .toList();
@@ -183,6 +175,7 @@ class BudgetNotifier extends StateNotifier<BudgetState> {
       state = BudgetState.loaded(
         budget: current.budget.copyWith(categories: updatedCategories),
         spentPerCategory: current.spentPerCategory,
+        uncategorizedSpent: current.uncategorizedSpent,
       );
     } on AppException catch (e) {
       state = BudgetState.error(_friendlyMessage(e));
@@ -193,50 +186,59 @@ class BudgetNotifier extends StateNotifier<BudgetState> {
     final current = state;
     if (current is! BudgetLoaded) return;
 
-    // Optimistic update: remove locally before server confirms.
     final optimisticCategories = current.budget.categories
         .where((c) => c.id != categoryId)
         .toList();
 
+    final optimisticSpent =
+        Map<String, double>.from(current.spentPerCategory)
+          ..remove(categoryId);
+
     state = BudgetState.loaded(
       budget: current.budget.copyWith(categories: optimisticCategories),
-      spentPerCategory: {
-        ...current.spentPerCategory..remove(categoryId),
-      },
+      spentPerCategory: optimisticSpent,
+      uncategorizedSpent: current.uncategorizedSpent,
     );
 
     try {
       await _budgetRepo.deleteCategory(categoryId);
     } on AppException catch (e) {
-      // Roll back on failure.
       state = current;
       state = BudgetState.error(_friendlyMessage(e));
     }
   }
 
   // ----------------------------------------------------------------
-  // Helpers
+  // Private helpers
   // ----------------------------------------------------------------
 
-  /// Fetches this month's expenses and sums spending per category ID.
-  Future<Map<String, double>> _computeSpentPerCategory(
-    Budget budget,
+  /// Returns a tuple of:
+  ///   - [Map<String, double>] spent per category ID
+  ///   - [double] total uncategorized spending
+  ///
+  /// Expenses with a null categoryId are not dropped — they are
+  /// summed separately so the home screen can show total spend
+  /// accurately including uncategorized expenses.
+  Future<(Map<String, double>, double)> _computeSpentPerCategory(
     DateTime month,
   ) async {
     final expenses = await _expenseRepo.getExpensesByMonth(month);
+
     final Map<String, double> totals = {};
+    double uncategorized = 0;
 
     for (final expense in expenses) {
-      if (expense.categoryId == null) continue;
-      totals[expense.categoryId!] =
-          (totals[expense.categoryId!] ?? 0) + expense.total;
+      if (expense.categoryId == null) {
+        uncategorized += expense.total;
+      } else {
+        totals[expense.categoryId!] =
+            (totals[expense.categoryId!] ?? 0) + expense.total;
+      }
     }
 
-    return totals;
+    return (totals, uncategorized);
   }
 
-  /// Converts a typed [AppException] into a user-friendly string.
-  /// Raw exception messages from Supabase are never shown directly.
   String _friendlyMessage(AppException e) => switch (e) {
         UnauthorizedException() => 'Please sign in to continue.',
         ValidationException()   => e.message,
@@ -246,15 +248,6 @@ class BudgetNotifier extends StateNotifier<BudgetState> {
       };
 }
 
-// ----------------------------------------------------------------
-// Provider
-// ----------------------------------------------------------------
-
-/// Family provider — one notifier instance per month.
-///
-/// Using .family here means each month gets its own independent state.
-/// The home screen for March and the analytics view for February
-/// can both be alive simultaneously without interfering.
 final budgetNotifierProvider = StateNotifierProvider.family
     .autoDispose<BudgetNotifier, BudgetState, DateTime>(
   (ref, month) {

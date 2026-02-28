@@ -102,7 +102,7 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(_),
             child: const Text('Cancel'),
           ),
           FilledButton(
@@ -112,7 +112,7 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
                 ref
                     .read(budgetNotifierProvider(_selectedMonth).notifier)
                     .updateBudgetTotal(value);
-                Navigator.pop(context);
+                Navigator.pop(_);
               }
             },
             child: const Text('Save'),
@@ -132,13 +132,13 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(_, false),
             child: const Text('Cancel'),
           ),
           FilledButton(
             style:
                 FilledButton.styleFrom(backgroundColor: AppColors.error),
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => Navigator.pop(_, true),
             child: const Text('Delete'),
           ),
         ],
