@@ -341,6 +341,7 @@ class _CategoryTile extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Flexible(
                   child: Text(
@@ -351,18 +352,38 @@ class _CategoryTile extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.edit_outlined, size: 18),
-                  onPressed: onEdit,
-                  visualDensity: VisualDensity.compact,
+                
+                //const Spacer(),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.edit_outlined, size: 18),
+                      onPressed: onEdit,
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, size: 18),
+                      color: AppColors.error,
+                      onPressed: onDelete,
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                    ),
+                    SizedBox(width: context.screenWidth * 0.038),
+                    CurrencyText(
+                      remaining,
+                      style: TextStyle(
+                        fontSize: (context.screenWidth * 0.038).clamp(14.0, 18.0),
+                        fontWeight: FontWeight.w700,
+                        color: remaining >= 0
+                            ? AppColors.success
+                            : AppColors.error,
+                      ),
+                    ),
+                  ],
                 ),
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, size: 18),
-                  color: AppColors.error,
-                  onPressed: onDelete,
-                  visualDensity: VisualDensity.compact,
-                ),
+                
               ],
             ),
             SizedBox(
@@ -375,41 +396,84 @@ class _CategoryTile extends StatelessWidget {
             SizedBox(
               height: context.heightFraction(0.008).clamp(4.0, 8.0),
             ),
-            Row(
+                        Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Allocated',
+                  'Spent',
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: theme.colorScheme.outline,
                   ),
                 ),
-                CurrencyText(
-                  category.allocatedAmount,
-                  style: theme.textTheme.labelSmall,
-                ),
-              ],
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Remaining',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.outline,
-                  ),
-                ),
-                CurrencyText(
-                  remaining,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: remaining >= 0
-                        ? AppColors.success
-                        : AppColors.error,
-                    fontWeight: FontWeight.w600,
+                RichText(
+                  text: TextSpan(
+                    style: theme.textTheme.labelSmall,
+                    children: [
+                      TextSpan(
+                        text: '\$${spent.toStringAsFixed(2)}',
+                      ),
+                      TextSpan(
+                        text:
+                            ' of \$${category.allocatedAmount.toStringAsFixed(2)}',
+                        style: TextStyle(
+                          color: theme.colorScheme.outline,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
+            // Row(
+            //   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            //   children: [
+            //     Text(
+            //       'Allocated',
+            //       style: theme.textTheme.labelSmall?.copyWith(
+            //         color: theme.colorScheme.outline,
+            //       ),
+            //     ),
+            //     CurrencyText(
+            //       category.allocatedAmount,
+            //       style: theme.textTheme.labelSmall,
+            //     ),
+            //   ],
+            // ),
+            // Row(
+            //   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            //   children: [
+            //     Text(
+            //       'Spent',
+            //       style: theme.textTheme.labelSmall?.copyWith(
+            //         color: theme.colorScheme.outline,
+            //       ),
+            //     ),
+            //     CurrencyText(
+            //       (category.allocatedAmount - spent),
+            //       style: theme.textTheme.labelSmall,
+            //     ),
+            //   ],
+            // ),
+            // Row(
+            //   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            //   children: [
+            //     Text(
+            //       'Remaining',
+            //       style: theme.textTheme.labelSmall?.copyWith(
+            //         color: theme.colorScheme.outline,
+            //       ),
+            //     ),
+            //     CurrencyText(
+            //       remaining,
+            //       style: theme.textTheme.labelSmall?.copyWith(
+            //         color: remaining >= 0
+            //             ? AppColors.success
+            //             : AppColors.error,
+            //         fontWeight: FontWeight.w600,
+            //       ),
+            //     ),
+            //   ],
+            // ),
           ],
         ),
       ),

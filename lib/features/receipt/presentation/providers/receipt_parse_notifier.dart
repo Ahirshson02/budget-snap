@@ -116,6 +116,9 @@ class ReceiptParseNotifier extends StateNotifier<ReceiptParseState> {
   /// Converts the reviewed [ParsedReceipt] into an [Expense] and
   /// persists it. Returns true on success so the UI can navigate away.
   Future<bool> saveExpense({
+    required DateTime date,
+    required double total,
+    required String? merchant,
     required String? categoryId,
     required String? comment,
     required List<({String name, double price, String? categoryId})> items,
@@ -126,12 +129,10 @@ class ReceiptParseNotifier extends StateNotifier<ReceiptParseState> {
     state = const ReceiptParseState.saving();
 
     try {
-      final parsed = current.parsed;
-
       await _expenseRepo.createExpense(
-        date: parsed.date ?? DateTime.now(),
-        total: parsed.total ?? 0,
-        merchant: parsed.merchant,
+        date: date,
+        total: total,
+        merchant: merchant,
         categoryId: categoryId,
         comment: comment,
         items: items,

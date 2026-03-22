@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:budget_snap/core/utils/currency_input_formatter.dart';
 import 'package:budget_snap/core/utils/snackbar_service.dart';
 import 'package:budget_snap/core/utils/validators.dart';
+import 'package:budget_snap/features/receipt/presentation/widgets/category_dropdown.dart';
+import 'package:budget_snap/features/receipt/presentation/widgets/expense_item_form.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -29,12 +31,12 @@ class ReceiptReviewForm extends ConsumerStatefulWidget {
   final String imagePath;
 
   @override
-  ConsumerState<ReceiptReviewForm> createState() =>
-      _ReceiptReviewFormState();
+  ConsumerState<ReceiptReviewForm> createState() => _ReceiptReviewFormState();
 }
 
 class _ReceiptReviewFormState extends ConsumerState<ReceiptReviewForm> {
   final _formKey = GlobalKey<FormState>();
+  final _scrollController = ScrollController();
 
   // Controllers for top-level receipt fields
   late final _merchantCtrl =
@@ -44,9 +46,9 @@ class _ReceiptReviewFormState extends ConsumerState<ReceiptReviewForm> {
   );
   late final _commentCtrl = TextEditingController();
 
-  // Selected date — defaults to parsed date or today
-  late DateTime _selectedDate =
-      widget.parsed.date ?? DateTime.now();
+  // Selected date — source of truth for submit; _dateCtrl mirrors it for display
+  late DateTime _selectedDate = widget.parsed.date ?? DateTime.now();
+  late final TextEditingController _dateCtrl;
 
   // Top-level category for the whole expense
   String? _selectedCategoryId;
@@ -59,13 +61,18 @@ class _ReceiptReviewFormState extends ConsumerState<ReceiptReviewForm> {
   @override
   void initState() {
     super.initState();
+    _dateCtrl = TextEditingController(
+      text: DateFormat.yMMMd().format(_selectedDate),
+    );
     _itemNameControllers = widget.parsed.items
         .map((i) => TextEditingController(text: i.name))
         .toList();
-    _itemPriceControllers = widget.parsed.items
-        .map((i) => TextEditingController(text: i.price.toStringAsFixed(2)))
-        .toList();
-    _itemCategoryIds = List.filled(widget.parsed.items.length, null);
+    _itemPriceControllers = widget.parsed.items.map((i) {
+      final ctrl = TextEditingController(text: i.price.toStringAsFixed(2));
+      ctrl.addListener(_recalculateTotal);
+      return ctrl;
+    }).toList();
+    _itemCategoryIds = List.filled(widget.parsed.items.length, null, growable: true);
 
     // Load the current month's budget so we can populate category dropdowns
     final now = DateTime.now();
@@ -78,9 +85,11 @@ class _ReceiptReviewFormState extends ConsumerState<ReceiptReviewForm> {
 
   @override
   void dispose() {
+    _scrollController.dispose();
     _merchantCtrl.dispose();
     _totalCtrl.dispose();
     _commentCtrl.dispose();
+    _dateCtrl.dispose();
     for (final c in _itemNameControllers) {
       c.dispose();
     }
@@ -101,54 +110,86 @@ class _ReceiptReviewFormState extends ConsumerState<ReceiptReviewForm> {
   }
 
   Future<void> _selectDate() async {
+    print("run selectDate");
     final picked = await showDatePicker(
       context: context,
-      initialDate: _selectedDate,
+      //initialDate: _selectedDate,
       firstDate: DateTime(2020),
       lastDate: DateTime.now(),
     );
-    if (picked != null) setState(() => _selectedDate = picked);
-  }
-
-Future<void> _submit() async {
-  if (!_formKey.currentState!.validate()) return;
-
-  final items = List.generate(
-    _itemNameControllers.length,
-    (i) => (
-      name: _itemNameControllers[i].text.trim(),
-      price: double.tryParse(_itemPriceControllers[i].text) ?? 0,
-      categoryId: _itemCategoryIds[i],
-    ),
-  );
-
-  final success = await ref
-      .read(receiptParseNotifierProvider.notifier)
-      .saveExpense(
-        categoryId: _selectedCategoryId,
-        comment: _commentCtrl.text.trim().isEmpty
-            ? null
-            : _commentCtrl.text.trim(),
-        items: items,
-      );
-
-  if (!mounted) return;
-
-  if (success) {
-    SnackBarService.showSuccess(context, 'Expense saved successfully');
-  } else {
-    final state = ref.read(receiptParseNotifierProvider);
-    if (state is ReceiptParseError) {
-      SnackBarService.showError(context, state.message);
+    if (picked != null) {
+      setState(() => _selectedDate = picked);
+      _dateCtrl.text = DateFormat.yMMMd().format(picked);
     }
   }
-}
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    final items = List.generate(
+      _itemNameControllers.length,
+      (i) => (
+        name: _itemNameControllers[i].text.trim(),
+        price: double.tryParse(_itemPriceControllers[i].text) ?? 0,
+        categoryId: _itemCategoryIds[i],
+      ),
+    );
+
+    final double total = double.tryParse(_totalCtrl.text) ??
+    items.fold(0.0, (sum, item) => sum + item.price);
+
+    final success =
+        await ref.read(receiptParseNotifierProvider.notifier).saveExpense(
+              date: _selectedDate,
+              total: double.tryParse(_totalCtrl.text) ?? 0,
+              merchant: _merchantCtrl.text.trim().isEmpty
+                  ? null
+                  : _merchantCtrl.text.trim(),
+              categoryId: _selectedCategoryId,
+              comment: _commentCtrl.text.trim().isEmpty
+                  ? null
+                  : _commentCtrl.text.trim(),
+              items: items,
+            );
+
+    if (!mounted) return;
+
+    if (success) {
+      final expenseMonth = DateTime(_selectedDate.year, _selectedDate.month);
+      ref
+          .read(budgetNotifierProvider(expenseMonth).notifier)
+          .loadBudget(expenseMonth);
+      SnackBarService.showSuccess(context, 'Expense saved successfully');
+    } else {
+      final state = ref.read(receiptParseNotifierProvider);
+      if (state is ReceiptParseError) {
+        SnackBarService.showError(context, state.message);
+      }
+    }
+  }
+
+  void _recalculateTotal() {
+    final sum = _itemPriceControllers.fold(
+      0.0,
+      (total, ctrl) => total + (double.tryParse(ctrl.text) ?? 0.0),
+    );
+    _totalCtrl.text = sum.toStringAsFixed(2);
+  }
 
   void _addItem() {
+    final priceCtrl = TextEditingController();
+    priceCtrl.addListener(_recalculateTotal);
     setState(() {
-      _itemNameControllers.add(TextEditingController());
-      _itemPriceControllers.add(TextEditingController());
-      _itemCategoryIds.add(null);
+      _itemNameControllers.insert(0, TextEditingController());
+      _itemPriceControllers.insert(0, priceCtrl);
+      _itemCategoryIds.insert(0, null);
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollController.animateTo(
+        _scrollController.position.minScrollExtent,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
     });
   }
 
@@ -160,6 +201,7 @@ Future<void> _submit() async {
       _itemPriceControllers.removeAt(index);
       _itemCategoryIds.removeAt(index);
     });
+    _recalculateTotal();
   }
 
   @override
@@ -167,12 +209,13 @@ Future<void> _submit() async {
     final isSaving =
         ref.watch(receiptParseNotifierProvider) is ReceiptParseSaving;
     final categories = _getCategories();
-    final theme      = Theme.of(context);
-    final hPad       = context.horizontalPadding;
+    final theme = Theme.of(context);
+    final hPad = context.horizontalPadding;
 
     return Form(
       key: _formKey,
       child: ListView(
+        controller: _scrollController,
         padding: EdgeInsets.symmetric(
           horizontal: hPad,
           vertical: context.heightFraction(0.015).clamp(8.0, 16.0),
@@ -197,19 +240,14 @@ Future<void> _submit() async {
           SizedBox(height: context.heightFraction(0.015).clamp(8.0, 14.0)),
 
           // Date picker row
-          InkWell(
+          TextFormField(
+            controller: _dateCtrl,
+            readOnly: true,
             onTap: _selectDate,
-            borderRadius: BorderRadius.circular(AppRadius.md),
-            child: InputDecorator(
-              decoration: const InputDecoration(
-                labelText: 'Date',
-                prefixIcon: Icon(Icons.calendar_today_outlined),
-                suffixIcon: Icon(Icons.edit_calendar_outlined),
-              ),
-              child: Text(
-                DateFormat.yMMMd().format(_selectedDate),
-                style: theme.textTheme.bodyLarge,
-              ),
+            decoration: const InputDecoration(
+              labelText: 'Date',
+              prefixIcon: Icon(Icons.calendar_today_outlined),
+              suffixIcon: Icon(Icons.edit_calendar_outlined),
             ),
           ),
           SizedBox(height: context.heightFraction(0.015).clamp(8.0, 14.0)),
@@ -218,7 +256,7 @@ Future<void> _submit() async {
             controller: _totalCtrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: const InputDecoration(
-              labelText: 'Total',
+              labelText: 'Leave blank to auto sum items',
               prefixText: '\$ ',
             ),
             validator: (v) {
@@ -230,7 +268,7 @@ Future<void> _submit() async {
           SizedBox(height: context.heightFraction(0.015).clamp(8.0, 14.0)),
 
           // Category dropdown for the whole expense
-          _CategoryDropdown(
+          CategoryDropdown(
             label: 'Category (optional)',
             value: _selectedCategoryId,
             categories: categories,
@@ -249,6 +287,13 @@ Future<void> _submit() async {
           ),
           SizedBox(height: context.heightFraction(0.025).clamp(14.0, 24.0)),
 
+          LoadingButton(
+            label: 'Save Expense',
+            isLoading: isSaving,
+            onPressed: _submit,
+          ),
+          SizedBox(height: context.heightFraction(0.02).clamp(10.0, 20.0)),
+          
           // ── Section: Line Items ──────────────────────────────────
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -281,7 +326,7 @@ Future<void> _submit() async {
           else
             ...List.generate(
               _itemNameControllers.length,
-              (index) => _LineItemRow(
+              (index) => LineItemRow(
                 index: index,
                 nameController: _itemNameControllers[index],
                 priceController: _itemPriceControllers[index],
@@ -295,13 +340,6 @@ Future<void> _submit() async {
             ),
 
           SizedBox(height: context.heightFraction(0.03).clamp(16.0, 28.0)),
-
-          LoadingButton(
-            label: 'Save Expense',
-            isLoading: isSaving,
-            onPressed: _submit,
-          ),
-          SizedBox(height: context.heightFraction(0.02).clamp(10.0, 20.0)),
         ],
       ),
     );
@@ -358,208 +396,6 @@ class _SectionHeader extends StatelessWidget {
       style: Theme.of(context).textTheme.titleMedium?.copyWith(
             fontWeight: FontWeight.w700,
           ),
-    );
-  }
-}
-
-// ----------------------------------------------------------------
-// Category dropdown
-// ----------------------------------------------------------------
-
-class _CategoryDropdown extends StatelessWidget {
-  const _CategoryDropdown({
-    required this.label,
-    required this.value,
-    required this.categories,
-    required this.onChanged,
-  });
-
-  final String label;
-  final String? value;
-  final List<Category> categories;
-  final ValueChanged<String?> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    if (categories.isEmpty) return const SizedBox.shrink();
-
-    return DropdownButtonFormField<String>(
-      value: value,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: const Icon(Icons.category_outlined),
-      ),
-      isExpanded: true,
-      items: [
-        const DropdownMenuItem(
-          value: null,
-          child: Text('No category'),
-        ),
-        ...categories.map(
-          (cat) => DropdownMenuItem(
-            value: cat.id,
-            child: Text(
-              cat.name,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ),
-      ],
-      onChanged: onChanged,
-    );
-  }
-}
-
-// ----------------------------------------------------------------
-// Line item row
-// ----------------------------------------------------------------
-
-class _LineItemRow extends StatelessWidget {
-  const _LineItemRow({
-    required this.index,
-    required this.nameController,
-    required this.priceController,
-    required this.categories,
-    required this.selectedCategoryId,
-    required this.onCategoryChanged,
-    required this.onRemove,
-  });
-
-  final int index;
-  final TextEditingController nameController;
-  final TextEditingController priceController;
-  final List<Category> categories;
-  final String? selectedCategoryId;
-  final ValueChanged<String?> onCategoryChanged;
-  final VoidCallback onRemove;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme    = Theme.of(context);
-    final innerPad = context.widthFraction(0.03).clamp(10.0, 16.0);
-
-    return Card(
-      margin: EdgeInsets.only(
-        bottom: context.heightFraction(0.012).clamp(6.0, 12.0),
-      ),
-      child: Padding(
-        padding: EdgeInsets.all(innerPad),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Item header with number and remove button
-            Row(
-              children: [
-                Text(
-                  'Item ${index + 1}',
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.primary,
-                  ),
-                ),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.close, size: 18),
-                  onPressed: onRemove,
-                  visualDensity: VisualDensity.compact,
-                  color: theme.colorScheme.error,
-                ),
-              ],
-            ),
-            SizedBox(height: context.heightFraction(0.008).clamp(4.0, 8.0)),
-
-            // Name and price on the same row on wider screens,
-            // stacked on narrow screens
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final isWide = constraints.maxWidth > 360;
-
-                if (isWide) {
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        flex: 3,
-                        child: _NameField(controller: nameController),
-                      ),
-                      SizedBox(width: context.widthFraction(0.02)),
-                      Expanded(
-                        flex: 2,
-                        child: _PriceField(controller: priceController),
-                      ),
-                    ],
-                  );
-                }
-
-                return Column(
-                  children: [
-                    _NameField(controller: nameController),
-                    SizedBox(
-                        height: context.heightFraction(0.01).clamp(6.0, 10.0)),
-                    _PriceField(controller: priceController),
-                  ],
-                );
-              },
-            ),
-
-            if (categories.isNotEmpty) ...[
-              SizedBox(
-                  height: context.heightFraction(0.01).clamp(6.0, 10.0)),
-              _CategoryDropdown(
-                label: 'Item Category',
-                value: selectedCategoryId,
-                categories: categories,
-                onChanged: onCategoryChanged,
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _NameField extends StatelessWidget {
-  const _NameField({required this.controller});
-
-  final TextEditingController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return TextFormField(
-      controller: controller,
-      textCapitalization: TextCapitalization.words,
-      decoration: const InputDecoration(
-        labelText: 'Item Name',
-        isDense: true,
-      ),
-      validator: (v) {
-        if (v == null || v.trim().isEmpty) return 'Required';
-        return null;
-      },
-    );
-  }
-}
-class _PriceField extends StatelessWidget {
-  const _PriceField({required this.controller});
-
-  final TextEditingController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return TextFormField(
-      controller: controller,
-      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-      inputFormatters: [CurrencyInputFormatter()],
-      decoration: const InputDecoration(
-        labelText: 'Price',
-        prefixText: '\$ ',
-        isDense: true,
-      ),
-      validator: Validators.compose([
-        Validators.required('Required'),
-        Validators.positiveAmount(),
-      ]),
     );
   }
 }

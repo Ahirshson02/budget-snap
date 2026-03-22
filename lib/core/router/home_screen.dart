@@ -419,31 +419,37 @@ class _CategoryCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                Consumer(
-                  builder: (context, ref, _) => IconButton(
-                    icon: const Icon(Icons.add_circle_outline_rounded),
-                    iconSize: (context.screenWidth * 0.05).clamp(18.0, 22.0),
-                    visualDensity: VisualDensity.compact,
-                    tooltip: 'Add charge',
-                    color: AppColors.primary,
-                    onPressed: () => showAddManualExpenseDialog(
-                      context: context,
-                      ref: ref,
-                      category: category,
-                      month: month
+               // Spacer(),
+                Row(
+                  children: [
+                    Consumer(
+                      builder: (context, ref, _) => IconButton(
+                        icon: const Icon(Icons.add_circle_outline_rounded),
+                        iconSize: (context.screenWidth * 0.05).clamp(18.0, 22.0),
+                        visualDensity: VisualDensity.compact,
+                        tooltip: 'Add charge',
+                        color: AppColors.primary,
+                        onPressed: () => showAddManualExpenseDialog(
+                          context: context,
+                          ref: ref,
+                          category: category,
+                          month: month
+                        ),
+                      ),
                     ),
-                  ),
+                    CurrencyText(
+                      remaining,
+                      style: TextStyle(
+                        fontSize: (context.screenWidth * 0.038).clamp(14.0, 18.0),
+                        fontWeight: FontWeight.w700,
+                        color: remaining >= 0
+                            ? AppColors.success
+                            : AppColors.error,
+                      ),
+                    ),
+                  ],
                 ),
-                CurrencyText(
-                  remaining,
-                  style: TextStyle(
-                    fontSize: (context.screenWidth * 0.038).clamp(14.0, 18.0),
-                    fontWeight: FontWeight.w700,
-                    color: remaining >= 0
-                        ? AppColors.success
-                        : AppColors.error,
-                  ),
-                ),
+                
               ],
             ),
             SizedBox(height: context.heightFraction(0.01).clamp(4.0, 10.0)),

@@ -13,7 +13,7 @@ pluginManagement {
         google()
         mavenCentral()
         gradlePluginPortal()
-    }w
+    }
 }
 
 plugins {

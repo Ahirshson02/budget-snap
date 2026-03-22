@@ -149,6 +149,7 @@ class SupabaseExpenseRepository implements ExpenseRepository {
             'user_id':     userId,
             'name':        item.name,
             'price':       item.price,
+            //if(item.comment != null) 'comment' : item.comment,
             if (item.categoryId != null) 'category_id': item.categoryId,
           }).toList(),
         );

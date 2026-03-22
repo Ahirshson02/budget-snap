@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../utils/responsive.dart';
 import '../theme/app_theme.dart';
 
 /// Wraps the entire app to catch unhandled widget tree errors.
