@@ -182,6 +182,22 @@ class BudgetNotifier extends StateNotifier<BudgetState> {
     }
   }
 
+  Future<void> importLastMonth(DateTime month) async {
+    state = const BudgetState.loading();
+
+    try {
+      final budget = await _budgetRepo.copyBudgetFromLastMonth(month);
+
+      state = BudgetState.loaded(
+        budget: budget,
+        spentPerCategory: {},
+        uncategorizedSpent: 0,
+      );
+    } on AppException catch (e) {
+      state = BudgetState.error(_friendlyMessage(e));
+    }
+  }
+
   Future<void> deleteCategory(String categoryId) async {
     final current = state;
     if (current is! BudgetLoaded) return;

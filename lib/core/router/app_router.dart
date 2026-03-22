@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -54,8 +53,12 @@ class AppRouter {
     initialLocation: AppRoutes.splash,
     refreshListenable: _authNotifier,
     redirect: (context, state) {
-      final session = ProviderScope.containerOf(context)
-          .read(currentUserProvider);
+      // Read directly from the Supabase SDK — not through currentUserProvider.
+      // currentUserProvider is a plain Provider cached at null on startup and
+      // never recomputes, so by the time the redirect fires after sign-in the
+      // cached value is still null, causing the redirect to kick the user back
+      // to sign-in immediately after context.go(home) succeeds.
+      final session = supabaseClientInstance.auth.currentUser;
 
       final location = state.matchedLocation;
 

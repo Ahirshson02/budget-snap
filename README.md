@@ -1,16 +1,22 @@
-# budget_snap
+# Budget Snap
 
-A new Flutter project.
+_Project created by Claude Code._
 
-## Getting Started
+## Overview
 
-This project is a starting point for a Flutter application.
+Budget Snap is a budgeting app with receipt parsing, analytics, and category-based expense tracking.
 
-A few resources to get you started if this is your first Flutter project:
+## Current Progress
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+- Dependencies & setup ✅  
+- Supabase configuration ✅  
+- Data models 🚧 (in progress)
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Structure
+
+See the following docs for more details:
+
+- `docs/architecture.md`
+- `docs/todo.md`
+- `docs/research.md`
+- `docs/bugs.md`

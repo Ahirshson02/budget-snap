@@ -244,6 +244,49 @@ class SupabaseBudgetRepository implements BudgetRepository {
     }
   }
 
+  @override
+  Future<Budget> copyBudgetFromLastMonth(DateTime month) async {
+    try {
+      final normalized = _firstOfMonth(month);
+      final prevMonth  = DateTime.utc(
+        normalized.year,
+        normalized.month - 1,
+        1,
+      );
+
+      final source = await getBudgetByMonth(prevMonth);
+      if (source == null) {
+        throw const NotFoundException(
+          'No budget found for the previous month.',
+        );
+      }
+
+      // createBudget will throw ValidationException if [month] already exists.
+      final newBudget = await createBudget(
+        month: normalized,
+        totalBudget: source.totalBudget,
+      );
+
+      for (final cat in source.categories) {
+        await createCategory(
+          budgetId: newBudget.id,
+          name: cat.name,
+          allocatedAmount: cat.allocatedAmount,
+          colorHex: cat.colorHex,
+        );
+      }
+
+      // Return fresh copy with all newly created categories.
+      return (await getBudgetByMonth(normalized))!;
+    } on AppException {
+      rethrow;
+    } on PostgrestException catch (e) {
+      throw ServerException(e.message);
+    } catch (e) {
+      throw LocalException(e.toString());
+    }
+  }
+
   // ----------------------------------------------------------------
   // Private helpers
   // ----------------------------------------------------------------

@@ -68,17 +68,17 @@ class ReceiptParseNotifier extends StateNotifier<ReceiptParseState> {
     state = const ReceiptParseState.parsing();
 
     try {
-      final rawText = await _ocrService.extractText(imagePath);
+      final recognized = await _ocrService.processReceipt(imagePath);
 
-      if (rawText.trim().isEmpty) {
+      if (recognized.isEmpty) {
         state = const ReceiptParseState.error(
-          'No text could be detected in this image. '
+          'No receipt data could be detected in this image. '
           'Please try a clearer photo with better lighting.',
         );
         return;
       }
 
-      final parsed = _parserService.parse(rawText);
+      final parsed = _parserService.parse(recognized);
 
       state = ReceiptParseState.review(
         parsed: parsed,

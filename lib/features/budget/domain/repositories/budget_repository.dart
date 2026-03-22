@@ -56,4 +56,11 @@ abstract class BudgetRepository {
   /// Delete a category. Expenses referencing this category will have
   /// their categoryId set to null (DB ON DELETE SET NULL).
   Future<void> deleteCategory(String categoryId);
+
+  /// Copy the previous month's budget (total + categories) to [month].
+  /// Creates a new budget for [month] with the same total and duplicated
+  /// categories. Expenses are not copied.
+  /// Throws [NotFoundException] if no budget exists for the prior month.
+  /// Throws [ValidationException] if a budget already exists for [month].
+  Future<Budget> copyBudgetFromLastMonth(DateTime month);
 }

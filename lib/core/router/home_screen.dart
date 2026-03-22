@@ -68,6 +68,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
+  Future<void> _importLastMonth() async {
+    await ref
+        .read(budgetNotifierProvider(_selectedMonth).notifier)
+        .importLastMonth(_selectedMonth);
+  }
+
   void _showCreateBudget() {
     showModalBottomSheet(
       context: context,
@@ -112,13 +118,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   message: message,
                   onRetry: _load,
                 ),
-              BudgetEmpty(:final month) => AppEmptyState(
-                  icon: Icons.account_balance_wallet_outlined,
-                  title: 'No budget yet',
-                  subtitle:
-                      'Create a budget for ${DateFormat.yMMMM().format(month)}.',
-                  actionLabel: 'Create Budget',
-                  onAction: _showCreateBudget,
+              BudgetEmpty(:final month) => Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    AppEmptyState(
+                      icon: Icons.account_balance_wallet_outlined,
+                      title: 'No budget yet',
+                      subtitle:
+                          'Create a budget for ${DateFormat.yMMMM().format(month)}.',
+                      actionLabel: 'Create Budget',
+                      onAction: _showCreateBudget,
+                    ),
+                    TextButton.icon(
+                      onPressed: _importLastMonth,
+                      icon: const Icon(Icons.copy_outlined, size: 18),
+                      label: const Text('Import Last Month'),
+                    ),
+                  ],
                 ),
              BudgetLoaded(:final budget, :final spentPerCategory, :final uncategorizedSpent) =>
               _BudgetOverview(
