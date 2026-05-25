@@ -33,27 +33,44 @@ class ReceiptParseNotifier extends StateNotifier<ReceiptParseState> {
   Future<void> captureFromCamera() =>
       _pickImage(ImageSource.camera);
 
+  // Future<void> captureFromCamera() async{
+  //     try {
+  //   final XFile? image = await _imagePicker.pickImage(
+  //     source: ImageSource.camera,
+  //   );
+
+    
+  // } catch (e) {
+  //   print('Error picking image: $e');
+  //   return null;
+  // }
+  // }
+
   Future<void> captureFromGallery() =>
       _pickImage(ImageSource.gallery);
 
   Future<void> _pickImage(ImageSource source) async {
     state = const ReceiptParseState.capturing();
-
+    print("in _pickImage");
     try {
       final picked = await _imagePicker.pickImage(
         source: source,
         imageQuality: 90,   // Balance file size vs OCR quality
         maxWidth: 2048,     // Cap resolution — MLKit works well at this size
       );
-
+      print("ran pickImage");
       if (picked == null) {
         // User cancelled the picker
         state = const ReceiptParseState.idle();
         return;
       }
+      else{
+        print("picked is real");
+      }
 
       await _runOcr(picked.path);
     } catch (e) {
+      print('Image picker error: $e');
       state = ReceiptParseState.error(
         'Could not open camera or gallery. Please check app permissions.',
       );

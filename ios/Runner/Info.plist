@@ -13,7 +13,7 @@
 
 	<!-- Needed for google_mlkit_text_recognition -->
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Budget AI saves processed receipt images.</string>
+	<string>BudgetSnap saves processed receipt images.</string>
 
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
