@@ -1,6 +1,8 @@
 # Budget Snap
 
-_Project created by Claude Code._
+## Demo
+
+[![Watch the Demo](https://www.youtube.com/watch?v=jClJkwEJ14M)
 
 ## Overview
 
